@@ -1,0 +1,38 @@
+{
+    "color_boosts": {
+        "red": 1.0,
+        "green": 1.0,
+        "blue": 1.0
+    },
+    "weighting": {
+        "brightness_power": 1.7,
+        "saturation_power": 0.8,
+        "saturation_threshold": 0.25,
+        "luminance_threshold": 30,
+        "overall_multiplier": 2.0
+    },
+    "hsv_adjustments": {
+        "saturation_multiplier": 2,
+        "saturation_offset": 0.15,
+        "value_multiplier": 1.3,
+        "value_offset": 0.15,
+        "min_value": 0.25
+    },
+    "capture": {
+        "crop_percent": 0.15,
+        "update_delay": 0.02,
+        "transition_ms": 300,
+        "downsample": 8
+    },
+    "hue_adjustments": {
+        "yellow_boost": 1.2,
+        "yellow_hue_min": 20,
+        "yellow_hue_max": 70,
+        "cyan_boost": 1.3,
+        "cyan_hue_min": 160,
+        "cyan_hue_max": 210,
+        "magenta_boost": 1.3,
+        "magenta_hue_min": 280,
+        "magenta_hue_max": 330
+    }
+}

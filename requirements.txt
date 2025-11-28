@@ -1,0 +1,10 @@
+customtkinter
+python-kasa
+mss
+numpy
+watchfiles
+windows-toasts
+pystray
+Pillow
+pywin32
+winshell
