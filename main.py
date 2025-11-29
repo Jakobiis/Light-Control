@@ -3,6 +3,7 @@ import signal
 import colorsys
 import numpy as np
 import threading
+import sys
 from kasa import Discover
 from kasa.iot import IotBulb
 import mss
@@ -187,9 +188,18 @@ async def main():
         print("❌ Config is empty")
         return
 
-    gui_thread = threading.Thread(target=show_config_window, daemon=True)
+    # Check for --minimized flag
+    start_minimized = "--minimized" in sys.argv
+
+    gui_thread = threading.Thread(
+        target=show_config_window, args=(start_minimized,), daemon=True
+    )
     gui_thread.start()
-    print("🎨 Config window opened in background")
+
+    if start_minimized:
+        print("🎨 Config window started minimized in system tray")
+    else:
+        print("🎨 Config window opened in background")
 
     print("\n" + "=" * 50)
     print("💡 Smart Bulb Screen Sync (OPTIMIZED)")

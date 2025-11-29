@@ -1,8 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-
 set SILENT=0
+set MINIMIZED=0
+
+REM
+:parse_args
+if "%1"=="" goto done_parsing
 if "%1"=="--silent" set SILENT=1
+if "%1"=="--minimized" set MINIMIZED=1
+shift
+goto parse_args
+:done_parsing
 
 if %SILENT%==0 echo [1/4] Checking for Python installation...
 python --version >nul 2>&1
@@ -14,15 +22,12 @@ if errorlevel 1 (
     )
     exit /b 1
 )
-
 for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
 if %SILENT%==0 echo [OK] Found Python %PYTHON_VERSION%
-
 for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
     set MAJOR=%%a
     set MINOR=%%b
 )
-
 if %MAJOR% LSS 3 (
     if %SILENT%==0 (
         echo [ERROR] Python 3.11+ is required. You have Python %PYTHON_VERSION%
@@ -30,16 +35,13 @@ if %MAJOR% LSS 3 (
     )
     exit /b 1
 )
-
 if %MAJOR% EQU 3 if %MINOR% LSS 11 (
     if %SILENT%==0 (
         echo [WARNING] Python 3.11+ is recommended. You have Python %PYTHON_VERSION%
         echo Continuing anyway...
     )
 )
-
 if %SILENT%==0 echo.
-
 if %SILENT%==0 echo [2/4] Checking virtual environment...
 if exist "venv\Scripts\activate.bat" (
     if %SILENT%==0 echo [OK] Virtual environment found
@@ -55,12 +57,9 @@ if exist "venv\Scripts\activate.bat" (
     )
     if %SILENT%==0 echo [OK] Virtual environment created
 )
-
 if %SILENT%==0 echo.
-
 if %SILENT%==0 echo [3/4] Installing dependencies...
 call venv\Scripts\activate.bat
-
 python -c "import customtkinter, kasa, mss, numpy, watchfiles" >nul 2>&1
 if errorlevel 1 (
     if %SILENT%==0 (
@@ -68,13 +67,11 @@ if errorlevel 1 (
         echo This may take a few minutes on first run...
         echo.
     )
-
     if %SILENT%==0 (
         pip install -r requirements.txt
     ) else (
         pip install -r requirements.txt >nul 2>&1
     )
-
     if errorlevel 1 (
         if %SILENT%==0 (
             echo.
@@ -90,9 +87,7 @@ if errorlevel 1 (
 ) else (
     if %SILENT%==0 echo [OK] All packages already installed
 )
-
 if %SILENT%==0 echo.
-
 if %SILENT%==0 (
     echo [4/4] Starting Smart Bulb Screen Sync...
     echo ================================================
@@ -103,12 +98,15 @@ if %SILENT%==0 (
     echo.
 )
 
-start "" venv\Scripts\pythonw.exe main.py
+REM
+set MAIN_ARGS=
+if %MINIMIZED%==1 set MAIN_ARGS=--minimized
+
+start "" venv\Scripts\pythonw.exe main.py %MAIN_ARGS%
 
 if %SILENT%==0 (
     echo [OK] Program launched successfully!
     echo.
     timeout /t 3 /nobreak >nul
 )
-
 deactivate

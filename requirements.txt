@@ -1,10 +1,12 @@
-customtkinter
-python-kasa
-mss
-numpy
-watchfiles
-windows-toasts
-pystray
-Pillow
-pywin32
-winshell
+customtkinter>=5.2.0
+python-kasa>=0.7.0
+mss>=9.0.0
+numpy>=1.24.0
+watchfiles>=0.21.0
+Pillow>=10.0.0
+pystray>=0.19.5
+
+windows-toasts>=1.0.0; sys_platform == 'win32'
+pywin32>=306; sys_platform == 'win32'
+
+plyer>=2.1.0; sys_platform == 'linux'

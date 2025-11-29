@@ -5,11 +5,11 @@
         "blue": 1.0
     },
     "weighting": {
-        "brightness_power": 1.7,
+        "brightness_power": 1.5,
         "saturation_power": 0.8,
         "saturation_threshold": 0.25,
         "luminance_threshold": 30,
-        "overall_multiplier": 2.0
+        "overall_multiplier": 2
     },
     "hsv_adjustments": {
         "saturation_multiplier": 2,
