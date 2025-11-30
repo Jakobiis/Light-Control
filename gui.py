@@ -6,50 +6,15 @@ from PIL import Image, ImageDraw
 import threading
 import os
 import platform
-import subprocess
+from notifications import show_notification
+import mss
 
-COLORS = {
-    "bg": "#1a1f2e",
-    "bg_secondary": "#242b3d",
-    "accent": "#3d5a80",
-    "accent_hover": "#4a6fa5",
-    "text": "#e8eaed",
-    "text_dim": "#9aa5b1",
-    "border": "#2d3548",
-}
+from ui import build_settings_tab, build_monitor_tab, build_debug_tab, COLORS
+from icons import Icons
+from identify import identify_monitors
 
-# Platform detection
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
-
-# Platform-specific imports
-if IS_WINDOWS:
-    try:
-        from windows_toasts import InteractableWindowsToaster, Toast
-
-        interactableToaster = InteractableWindowsToaster(
-            applicationText="Light Bulb Configurator",
-        )
-    except ImportError:
-        interactableToaster = None
-else:
-    interactableToaster = None
-
-
-def show_notification(message):
-    """Cross-platform notification system"""
-    if IS_WINDOWS and interactableToaster:
-        newToast = Toast([message])
-        interactableToaster.show_toast(newToast)
-    elif IS_LINUX:
-        try:
-            subprocess.run(
-                ["notify-send", "Smart Bulb Config", message], check=False, timeout=2
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            print(f"Notification: {message}")
-    else:
-        print(f"Notification: {message}")
 
 
 class ConfigWindow:
@@ -58,12 +23,15 @@ class ConfigWindow:
         ctk.set_default_color_theme("blue")
 
         self.root = ctk.CTk()
-        self.root.title("Smart Bulb Configuration")
-        self.root.geometry("800x700")
+        self.root.title("Bulb Configuration")
+        self.root.geometry("900x750")
         self.root.configure(fg_color=COLORS["bg"])
+        self.root.minsize(800, 600)
 
         self.entries = {}
-
+        self.monitor_buttons = []
+        self.monitors_info = []
+        self.debug_widgets = {}
         self.tray_icon = None
         self.start_minimized = start_minimized
 
@@ -72,44 +40,145 @@ class ConfigWindow:
         self._create_ui()
         self._create_tray_icon()
 
-        # Start minimized if requested
         if self.start_minimized:
             self.root.after(100, self._hide_window)
+
+    def _get_monitors_info(self):
+        """Get information about all available monitors"""
+        try:
+            with mss.mss() as sct:
+                monitors = []
+                for i, monitor in enumerate(sct.monitors[1:], start=1):
+                    monitors.append(
+                        {
+                            "index": i,
+                            "width": monitor["width"],
+                            "height": monitor["height"],
+                            "left": monitor["left"],
+                            "top": monitor["top"],
+                        }
+                    )
+                return monitors
+        except Exception as e:
+            print(f"Error getting monitors: {e}")
+            return []
 
     def _create_ui(self):
         """Build the configuration interface"""
         main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
+        title_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        title_frame.pack(pady=(0, 20))
+
         title = ctk.CTkLabel(
-            main_frame,
-            text="💡 Smart Bulb Configuration",
+            title_frame,
+            text="Smart Bulb Configuration",
             font=("Segoe UI", 28, "bold"),
             text_color=COLORS["text"],
+            image=Icons.settings(size=(32, 32)),
+            compound="left",
         )
-        title.pack(pady=(0, 20))
+        title.pack()
 
-        scroll_frame = ctk.CTkScrollableFrame(
-            main_frame,
+        content_container = ctk.CTkFrame(main_frame, fg_color="transparent")
+        content_container.pack(fill="both", expand=True)
+
+        tab_sidebar = ctk.CTkFrame(
+            content_container,
+            fg_color=COLORS["bg_secondary"],
+            corner_radius=15,
+            border_width=2,
+            border_color=COLORS["border"],
+            width=180,
+        )
+        tab_sidebar.pack(side="left", fill="y", padx=(0, 15))
+        tab_sidebar.pack_propagate(False)
+
+        self.tab_buttons = []
+        self.current_tab = "display"
+
+        tabs_data = [
+            (
+                "display",
+                "Display",
+                Icons.monitor(size=(20, 20)),
+                self._show_display_tab,
+            ),
+            (
+                "settings",
+                "Settings",
+                Icons.settings(size=(20, 20)),
+                self._show_settings_tab,
+            ),
+            ("debug", "Debug", Icons.info(size=(20, 20)), self._show_debug_tab),
+        ]
+
+        tab_button_container = ctk.CTkFrame(tab_sidebar, fg_color="transparent")
+        tab_button_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        for tab_id, tab_text, tab_icon, tab_command in tabs_data:
+            is_selected = tab_id == self.current_tab
+
+            btn = ctk.CTkButton(
+                tab_button_container,
+                text=tab_text,
+                image=tab_icon,
+                compound="left",
+                command=lambda tid=tab_id, cmd=tab_command: self._switch_tab(tid, cmd),
+                font=("Segoe UI", 14, "bold"),
+                fg_color=COLORS["tab_selected"] if is_selected else "transparent",
+                hover_color=COLORS["tab_hover"],
+                corner_radius=10,
+                height=50,
+                anchor="w",
+                text_color=COLORS["text"],
+            )
+            btn.pack(fill="x", pady=5)
+            self.tab_buttons.append((tab_id, btn))
+
+        self.content_area = ctk.CTkFrame(
+            content_container,
             fg_color=COLORS["bg_secondary"],
             corner_radius=15,
             border_width=2,
             border_color=COLORS["border"],
         )
-        scroll_frame.pack(fill="both", expand=True)
+        self.content_area.pack(side="left", fill="both", expand=True)
 
-        self._build_section(scroll_frame, "Color Boosts", config["color_boosts"])
-        self._build_section(scroll_frame, "Weighting", config["weighting"])
-        self._build_section(scroll_frame, "HSV Adjustments", config["hsv_adjustments"])
-        self._build_section(scroll_frame, "Hue Adjustments", config["hue_adjustments"])
-        self._build_section(scroll_frame, "Capture Settings", config["capture"])
+        self.display_tab = ctk.CTkFrame(self.content_area, fg_color="transparent")
+        self.settings_tab = ctk.CTkFrame(self.content_area, fg_color="transparent")
+        self.debug_tab = ctk.CTkFrame(self.content_area, fg_color="transparent")
 
-        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        self.monitors_info = self._get_monitors_info()
+        current_monitor = config["capture"].get("monitor_index", 1)
+
+        self.monitor_buttons = build_monitor_tab(
+            self.display_tab,
+            self.monitors_info,
+            current_monitor,
+            self._select_monitor,
+            self._identify_monitors,
+        )
+
+        build_settings_tab(self.settings_tab, self.entries)
+        self.debug_widgets = build_debug_tab(self.debug_tab)
+
+        self._show_display_tab()
+
+        self._create_bottom_buttons(main_frame)
+        self._create_startup_options(main_frame)
+
+    def _create_bottom_buttons(self, parent):
+        """Create save and reload buttons"""
+        btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(20, 0))
 
         save_btn = ctk.CTkButton(
             btn_frame,
-            text="💾 Save Configuration",
+            text="Save Configuration",
+            image=Icons.save(size=(20, 20)),
+            compound="left",
             command=self._save_config,
             font=("Segoe UI", 14, "bold"),
             fg_color=COLORS["accent"],
@@ -121,7 +190,9 @@ class ConfigWindow:
 
         reload_btn = ctk.CTkButton(
             btn_frame,
-            text="🔄 Reload from File",
+            text="Reload from File",
+            image=Icons.refresh(size=(20, 20)),
+            compound="left",
             command=self._reload_config,
             font=("Segoe UI", 14, "bold"),
             fg_color=COLORS["bg_secondary"],
@@ -131,17 +202,18 @@ class ConfigWindow:
         )
         reload_btn.pack(side="left", expand=True, fill="x")
 
-        startup_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    def _create_startup_options(self, parent):
+        """Create startup checkboxes"""
+        startup_frame = ctk.CTkFrame(parent, fg_color="transparent")
         startup_frame.pack(fill="x", pady=(15, 0))
 
-        # Create inner frame to center checkboxes
         checkbox_container = ctk.CTkFrame(startup_frame, fg_color="transparent")
         checkbox_container.pack(anchor="center")
 
         self.startup_var = ctk.BooleanVar(value=self._check_startup_exists())
         startup_check = ctk.CTkCheckBox(
             checkbox_container,
-            text="🚀 Run on Startup",
+            text="Run on Startup",
             variable=self.startup_var,
             command=self._toggle_startup,
             font=("Segoe UI", 13),
@@ -155,7 +227,7 @@ class ConfigWindow:
         self.minimized_var = ctk.BooleanVar(value=self._check_launch_minimized())
         minimized_check = ctk.CTkCheckBox(
             checkbox_container,
-            text="🔽 Launch Minimized to Tray",
+            text="Launch Minimized to Tray",
             variable=self.minimized_var,
             command=self._toggle_launch_minimized,
             font=("Segoe UI", 13),
@@ -166,51 +238,123 @@ class ConfigWindow:
         )
         minimized_check.pack(side="left", pady=5)
 
-    def _build_section(self, parent, title, data_dict, prefix=""):
-        """Build a configuration section"""
-        section_frame = ctk.CTkFrame(parent, fg_color=COLORS["bg"], corner_radius=12)
-        section_frame.pack(fill="x", padx=15, pady=10)
+    def _switch_tab(self, tab_id, tab_command):
+        """Switch between tabs"""
+        self.current_tab = tab_id
 
-        header = ctk.CTkLabel(
-            section_frame,
-            text=title,
-            font=("Segoe UI", 18, "bold"),
-            text_color=COLORS["text"],
-            anchor="w",
-        )
-        header.pack(fill="x", padx=15, pady=(15, 10))
+        for tid, btn in self.tab_buttons:
+            if tid == tab_id:
+                btn.configure(fg_color=COLORS["tab_selected"])
+            else:
+                btn.configure(fg_color="transparent")
 
-        for key, value in data_dict.items():
-            row_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
-            row_frame.pack(fill="x", padx=15, pady=5)
+        tab_command()
 
-            label = ctk.CTkLabel(
-                row_frame,
-                text=self._format_label(key),
-                font=("Segoe UI", 13),
-                text_color=COLORS["text_dim"],
-                anchor="w",
+    def _show_display_tab(self):
+        """Show the display tab"""
+        self.settings_tab.pack_forget()
+        self.debug_tab.pack_forget()
+        self.display_tab.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def _show_settings_tab(self):
+        """Show the settings tab"""
+        self.display_tab.pack_forget()
+        self.debug_tab.pack_forget()
+        self.settings_tab.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def _show_debug_tab(self):
+        """Show the debug tab"""
+        self.display_tab.pack_forget()
+        self.settings_tab.pack_forget()
+        self.debug_tab.pack(fill="both", expand=True, padx=10, pady=10)
+        self._update_debug_info()
+
+    def _select_monitor(self, monitor_index):
+        """Handle monitor selection"""
+        config["capture"]["monitor_index"] = monitor_index
+
+        for card, idx in self.monitor_buttons:
+            is_selected = idx == monitor_index
+            card.configure(
+                fg_color=COLORS["card_selected"]
+                if is_selected
+                else COLORS["card_unselected"],
+                border_color=COLORS["accent"] if is_selected else COLORS["border"],
             )
-            label.pack(side="left", fill="x", expand=True)
+        self._save_config()
 
-            entry = ctk.CTkEntry(
-                row_frame,
-                width=150,
-                font=("Segoe UI", 13),
-                fg_color=COLORS["bg_secondary"],
-                border_color=COLORS["border"],
-                corner_radius=8,
+    def _identify_monitors(self):
+        """Show identification overlays on all monitors"""
+        if self.monitors_info:
+            identify_monitors(self.monitors_info, duration=4)
+        else:
+            messagebox.showwarning(
+                "No Monitors", "No monitors detected to identify.", parent=self.root
             )
-            entry.insert(0, str(value))
-            entry.pack(side="right", padx=(10, 0))
 
-            self.entries[f"{title}.{key}"] = (entry, data_dict, key)
+    def _update_debug_info(self):
+        """Update debug tab information"""
+        if not self.debug_widgets:
+            return
 
-        ctk.CTkLabel(section_frame, text="", height=10).pack()
+        current_monitor = config["capture"].get("monitor_index", 1)
+        self.debug_widgets["monitor_value"].configure(text=str(current_monitor))
 
-    def _format_label(self, key):
-        """Convert snake_case to Title Case"""
-        return key.replace("_", " ").title()
+        for monitor in self.monitors_info:
+            if monitor["index"] == current_monitor:
+                res_text = f"{monitor['width']}×{monitor['height']}"
+                self.debug_widgets["resolution_value"].configure(text=res_text)
+                break
+
+    def update_debug_color(self, rgb, hsv):
+        """
+        Update debug tab with current color
+        Call this from your main capture loop
+
+        Args:
+            rgb: Tuple of (r, g, b) values 0-255
+            hsv: Tuple of (h, s, v) values
+        """
+        if not self.debug_widgets:
+            return
+
+        try:
+            hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+            self.debug_widgets["color_preview"].configure(fg_color=hex_color)
+            _rgb = ", ".join(map(str, rgb))
+            self.debug_widgets["rgb_label"].configure(text=f"RGB: {_rgb}")
+            self.debug_widgets["hsv_label"].configure(
+                text=f"HSV: ({hsv[0]:.1f}, {hsv[1]:.1f}, {hsv[2]:.1f})"
+            )
+            self.debug_widgets["hex_label"].configure(text=f"HEX: {hex_color.upper()}")
+        except Exception as e:
+            print(f"Error updating debug color: {e}")
+
+    def update_debug_stats(
+        self, fps=0, update_rate=0, total_captures=0, uptime="00:00:00"
+    ):
+        """
+        Update debug tab statistics
+        Call this from your main capture loop
+
+        Args:
+            fps: Current frames per second
+            update_rate: Update rate in milliseconds
+            total_captures: Total number of captures
+            uptime: Uptime string (HH:MM:SS)
+        """
+        if not self.debug_widgets:
+            return
+
+        try:
+            self.debug_widgets["fps_value"].configure(text=f"{fps:.1f}")
+            self.debug_widgets["update_rate_value"].configure(
+                text=f"{update_rate:.0f} ms"
+            )
+            self.debug_widgets["captures_value"].configure(text=str(total_captures))
+            self.debug_widgets["uptime_value"].configure(text=uptime)
+        except Exception as e:
+            print(f"Error updating debug stats: {e}")
 
     def _hide_window(self):
         """Hide window instead of closing it"""
@@ -229,11 +373,9 @@ class ConfigWindow:
         def create_icon_image():
             img = Image.new("RGB", (64, 64), color=(26, 31, 46))
             draw = ImageDraw.Draw(img)
-
             draw.ellipse([18, 12, 46, 40], fill=(61, 90, 128), outline=(232, 234, 237))
             draw.rectangle([26, 40, 38, 48], fill=(154, 165, 177))
             draw.rectangle([24, 48, 40, 52], fill=(154, 165, 177))
-
             return img
 
         menu = pystray.Menu(
@@ -253,19 +395,15 @@ class ConfigWindow:
         tray_thread.start()
 
     def _on_show_clicked(self, icon, item):
-        """Show window from tray"""
         self.root.after(0, self.show_window)
 
     def _on_save_clicked(self, icon, item):
-        """Save config from tray"""
         self.root.after(0, self._save_config)
 
     def _on_reload_clicked(self, icon, item):
-        """Reload config from tray"""
         self.root.after(0, self._reload_config)
 
     def _on_exit_clicked(self, icon, item):
-        """Exit application"""
         self.tray_icon.stop()
         self.root.quit()
         os._exit(0)
@@ -369,7 +507,6 @@ class ConfigWindow:
                 script_path = os.path.abspath("run.sh")
                 work_dir = os.path.dirname(script_path)
 
-                # Make run.sh executable if it exists
                 if os.path.exists(script_path):
                     os.chmod(script_path, 0o755)
 
@@ -420,40 +557,10 @@ X-GNOME-Autostart-enabled=true
             self.minimized_var.set(False)
             return
 
-        # Re-create the startup entry with updated flags
         if IS_WINDOWS:
-            self._toggle_startup_windows_minimized()
+            self._toggle_startup_windows()
         elif IS_LINUX:
-            self._toggle_startup_linux_minimized()
-
-    def _toggle_startup_windows_minimized(self):
-        """Update Windows startup shortcut with minimized flag"""
-        autostart_path = self._get_autostart_path()
-
-        try:
-            from win32com.client import Dispatch
-
-            bat_path = os.path.abspath("run.bat")
-            shell = Dispatch("WScript.Shell")
-            shortcut = shell.CreateShortCut(autostart_path)
-            shortcut.TargetPath = bat_path
-
-            args = "--silent"
-            if self.minimized_var.get():
-                args += " --minimized"
-            shortcut.Arguments = args
-
-            shortcut.WorkingDirectory = os.path.dirname(bat_path)
-            shortcut.IconLocation = bat_path
-            shortcut.save()
-
-            status = "Enabled" if self.minimized_var.get() else "Disabled"
-            show_notification(f"Launch Minimized {status}!")
-        except Exception as e:
-            messagebox.showerror(
-                "Error", f"Failed to update startup shortcut: {e}", parent=self.root
-            )
-            self.minimized_var.set(not self.minimized_var.get())
+            self._toggle_startup_linux()
 
     def _save_config(self):
         """Save all entries back to config and file"""
@@ -506,8 +613,18 @@ X-GNOME-Autostart-enabled=true
         self.root.mainloop()
 
 
+_config_window_instance = None
+
+
 def show_config_window(start_minimized=False):
     """Initialize and show the configuration window"""
+    global _config_window_instance
     app = ConfigWindow(start_minimized=start_minimized)
+    _config_window_instance = app
     app.run()
     return app
+
+
+def get_config_window():
+    """Get the current config window instance"""
+    return _config_window_instance

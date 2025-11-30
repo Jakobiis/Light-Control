@@ -22,10 +22,11 @@
         "crop_percent": 0.15,
         "update_delay": 0.02,
         "transition_ms": 300,
-        "downsample": 8
+        "downsample": 16,
+        "monitor_index": 1
     },
     "hue_adjustments": {
-        "yellow_boost": 1.2,
+        "yellow_boost": 0.75,
         "yellow_hue_min": 20,
         "yellow_hue_max": 70,
         "cyan_boost": 1.3,

@@ -21,7 +21,7 @@ def load_config():
         config.clear()
         config.update(loaded_config)
 
-        print(f"✅ Loaded config from {CONFIG_FILE}")
+        print(f"Loaded config from {CONFIG_FILE}")
         return config
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in config file: {e}")
@@ -34,10 +34,9 @@ def save_config():
     try:
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=4)
-        print(f"💾 Saved config to {CONFIG_FILE}")
         return True
     except Exception as e:
-        print(f"⚠️ Error saving config: {e}")
+        print(f"Error saving config: {e}")
         return False
 
 
@@ -51,12 +50,11 @@ def reload_config():
         if new_config != config:
             config.clear()
             config.update(new_config)
-            print("🔄 Config reloaded!")
             return True
     except json.JSONDecodeError as e:
-        print(f"⚠️ Invalid JSON in config file: {e}")
+        print(f"Invalid JSON in config file: {e}")
     except Exception as e:
-        print(f"⚠️ Error reloading: {e}")
+        print(f"Error reloading: {e}")
     return False
 
 
